@@ -1,0 +1,8 @@
+# M1 smoke scenario: exercises the pipeline skeleton end to end with fakes.
+# No real audio yet (see polyglot/transport/replay_adapter.py docstring) —
+# user_text seeds the scripted fake ASR for each turn.
+id: m1-smoke
+lang: en
+turns:
+  - user_text: "My flight got cancelled, can I get a refund?"
+  - user_text: "What about compensation for the delay?"

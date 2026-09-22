@@ -1,5 +1,11 @@
-"""Fakes for every Protocol in polyglot/core/interfaces.py. See SPEC.md Section 14."""
+"""Fakes for every Protocol in polyglot/core/interfaces.py. See SPEC.md Section 14.
 
+Lives under polyglot/ (not tests/) so both unit tests and eval/replay.py's
+fakes-only M1 replay mode can import it without eval depending on the test
+tree.
+"""
+
+from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -27,7 +33,33 @@ class FakeASREngine:
     async def stream(
         self, frames: AsyncIterator[AudioFrame], lang_hint: str | None
     ) -> AsyncIterator[TranscriptPartial]:
+        # Drain frames (a real engine consumes them) so any side effect
+        # wrapped around the frame stream (e.g. Pipeline's VAD tap) runs.
+        async for _ in frames:
+            pass
         for partial in self._partials:
+            yield partial
+
+
+class ScriptedFakeASREngine:
+    """Like FakeASREngine, but yields a different scripted turn on each call.
+
+    Used by the replay CLI to drive a multi-turn scenario: one partials list
+    per scenario turn, consumed in order as the pipeline calls stream() once
+    per turn.
+    """
+
+    def __init__(self, scripts: list[list[TranscriptPartial]]) -> None:
+        self._scripts: deque[list[TranscriptPartial]] = deque(scripts)
+
+    async def stream(
+        self, frames: AsyncIterator[AudioFrame], lang_hint: str | None
+    ) -> AsyncIterator[TranscriptPartial]:
+        if not self._scripts:
+            raise RuntimeError("ScriptedFakeASREngine: no more scripted turns")
+        async for _ in frames:
+            pass
+        for partial in self._scripts.popleft():
             yield partial
 
 

@@ -1,5 +1,8 @@
 .PHONY: setup lint test up down ingest agent replay eval-smoke eval-full ablation report
 
+PROFILE ?= naive
+MODE ?= simulated
+
 setup:
 	uv sync
 	uv run pre-commit install
@@ -25,7 +28,7 @@ agent:
 	@echo "make agent: not implemented until M4"
 
 replay:
-	@echo "make replay: not implemented until M1"
+	uv run python -m eval.replay --scenario $(SCENARIO) --profile $(PROFILE) --mode $(MODE)
 
 eval-smoke:
 	@echo "make eval-smoke: not implemented until M7"

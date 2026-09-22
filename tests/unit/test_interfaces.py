@@ -8,7 +8,7 @@ from polyglot.core.interfaces import (
     TTSEngine,
     TurnDetector,
 )
-from tests.fakes import (
+from polyglot.fakes import (
     FakeASREngine,
     FakeClock,
     FakeLLMClient,

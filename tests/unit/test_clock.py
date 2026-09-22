@@ -12,7 +12,9 @@ def test_real_clock_starts_near_zero() -> None:
 async def test_real_clock_sleep_advances_time() -> None:
     clock = RealClock()
     await clock.sleep_ms(20)
-    assert clock.now_ms() >= 20
+    # Loose bound: OS timer resolution (especially on Windows) can wake
+    # asyncio.sleep a few ms early. This only checks real time passed at all.
+    assert clock.now_ms() >= 10
 
 
 def test_simulated_clock_starts_at_given_time() -> None:

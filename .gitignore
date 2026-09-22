@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.env
+
+# Generated reports keep the directory structure but not contents.
+reports/*
+!reports/.gitkeep
+
+# Golden and downloaded audio/datasets, never committed (CLAUDE.md data rules).
+eval/golden/audio/

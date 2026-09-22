@@ -1,0 +1,38 @@
+# Infra scaffold per SPEC.md Section 13. None of these services are exercised
+# by any code yet (M0) — postgres/redis are used starting M3, langfuse/livekit
+# starting M4. Versions are placeholders; pin exact tags when each service is
+# first actually used (CLAUDE.md rule 3).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: polyglot
+      POSTGRES_PASSWORD: polyglot
+      POSTGRES_DB: polyglot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,10 @@
+# Base config, overlaid by config/profiles/<naive|tuned>.yaml.
+# Model routing, thresholds, and per-language tuning are added in later
+# milestones (languages.yaml, thresholds.yaml, sources.yaml) as those
+# components are built.
+
+languages:
+  - en
+  - es
+  - hi
+  - tl

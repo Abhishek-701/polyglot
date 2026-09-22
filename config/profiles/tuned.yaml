@@ -1,0 +1,12 @@
+# All optimizations on. retrieval_bridge stays "mt" here until M3 picks a
+# winner (SPEC.md Section 3 bridge benchmark); update then.
+flags:
+  turn_detection: semantic
+  speculative_retrieval: true
+  prefix_cache_prompt_order: true
+  history_compaction: true
+  tts_chunking: clause
+  semantic_cache: true
+  filler_on_tool_call: true
+  asr_router_parakeet: true
+  retrieval_bridge: mt

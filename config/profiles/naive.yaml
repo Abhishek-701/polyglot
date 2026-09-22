@@ -1,0 +1,11 @@
+# All optimizations off. Must keep working forever (CLAUDE.md architecture rules).
+flags:
+  turn_detection: silence
+  speculative_retrieval: false
+  prefix_cache_prompt_order: false
+  history_compaction: false
+  tts_chunking: full
+  semantic_cache: false
+  filler_on_tool_call: false
+  asr_router_parakeet: false
+  retrieval_bridge: mt

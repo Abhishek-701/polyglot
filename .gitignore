@@ -10,5 +10,6 @@ __pycache__/
 reports/*
 !reports/.gitkeep
 
-# Golden and downloaded audio/datasets, never committed (CLAUDE.md data rules).
+# Golden and downloaded audio/datasets/models, never committed (CLAUDE.md data rules).
 eval/golden/audio/
+data/

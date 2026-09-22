@@ -1,5 +1,192 @@
 # Progress
 
+## M2: Real audio front end
+
+**Status:** complete, ready for human review.
+
+### What was built
+
+- `polyglot/audio/frames.py` — `pcm16_to_float32`/`float32_to_pcm16`,
+  `resample` (via torchaudio, already a dependency), `SampleBuffer` for
+  accumulating streaming samples.
+- `polyglot/audio/vad.py` — `SileroVAD`. Verified against installed
+  `silero-vad==6.2.2`: the model requires exact 512-sample (32ms) windows at
+  16kHz (raises `ValueError` below that). Reimplemented the speech
+  start/end state machine ourselves instead of using `silero_vad.VADIterator`,
+  because `VADIterator` only exposes `min_silence_duration_ms` — SPEC.md
+  Section 8.1 also wants `min_speech_ms` enforced, which needed our own
+  hysteresis logic.
+- `polyglot/asr/local_agreement.py` — `local_agreement_prefix` (word-level
+  longest common prefix) + stateful `LocalAgreement` wrapper. Hypothesis
+  property test in `tests/unit/test_local_agreement.py`.
+- `polyglot/asr/hallucination_guard.py` — `check_hallucination`, pure
+  function per SPEC.md Section 8.3 (no_speech_prob, avg_logprob,
+  compression_ratio, blocklist checks, in that order). Deliberately doesn't
+  do the "outside VAD speech region" check (needs VAD context this function
+  doesn't have) or event logging (no EventLog access) — both are for
+  whatever wires this into the real pipeline in M4.
+- `polyglot/asr/faster_whisper_engine.py` — `FasterWhisperEngine`
+  implementing the `ASREngine` protocol. Verified against installed
+  `faster-whisper==1.2.1`: `WhisperModel.transcribe()` takes a float32
+  `np.ndarray` directly, and its default `no_speech_threshold`/
+  `log_prob_threshold`/`compression_ratio_threshold` (0.6, -1.0, 2.4) are
+  exactly SPEC.md 8.3's guard thresholds — the spec was written against
+  faster-whisper's own defaults. Decodes every `asr_step_ms` (default 200ms)
+  in the default executor (blocking CPU call, per CLAUDE.md's "nothing
+  blocking on the audio path" rule).
+- `polyglot/langid/tracker.py` — `LangIDTracker` (fastText LID over
+  sliding word windows, per-language share + code-switch detection, SPEC.md
+  Section 8.4). Verified `fasttext-wheel==0.9.2` against installed
+  `numpy==2.5.3`: `_FastText.predict(str, ...)` is broken on numpy>=2
+  (`np.array(probs, copy=False)` raises `ValueError`). The multi-string
+  input path doesn't hit that code, so this always calls `predict([text],
+  ...)` and unwraps, even for one window.
+- `config/languages.yaml` — seeded `hallucination_blocklist` per language
+  (en/es/hi/tl). Other sections (VAD/turn thresholds, backchannels) left for
+  M5/M6 when they're tuned.
+- `scripts/download_datasets.py` — downloads (to gitignored `data/cache/`,
+  never committed): fastText LID model, a FLEURS subset per language (via
+  `datasets`, decoded with `soundfile` — see bug note below), the ESC-10
+  subset of ESC-50 (real ambient noise for the hallucination test), and
+  generated near-silence clips.
+- `eval/metrics/asr.py` / `eval/metrics/hallucination.py` — pure metric
+  functions (WER/CER via `jiwer` with our own text normalization;
+  non-empty-rate + suppression-reason breakdown).
+- `eval/asr_eval.py` / `eval/hallucination_eval.py` — CLIs producing the two
+  M2 accept-criteria reports under `reports/<run_id>/`.
+- Tests: `test_frames.py`, `test_local_agreement.py` (+ Hypothesis property
+  test), `test_hallucination_guard.py`, `test_vad.py` (synthetic
+  near-silence only — no network needed, silero-vad ships its weights in the
+  pip package), and `tests/integration/test_real_audio_components.py`
+  (`@pytest.mark.network`: real Silero VAD + faster-whisper + LangIDTracker
+  against a real downloaded FLEURS clip, skipped if the data isn't present).
+- `docs/data_licenses.md` — every dataset/model used so far, with license
+  and source.
+
+### The two M2 accept-criteria reports (real runs, saved under reports/)
+
+**ASR WER/CER, FLEURS subset, faster-whisper `small` int8 CPU** (`reports/asr-wer-1790119676/`):
+
+| Language | Clips | WER | CER |
+|---|---|---|---|
+| en | 8 | 0.058 | 0.024 |
+| es | 8 | 0.043 | 0.008 |
+| hi | 8 | 0.418 | 0.161 |
+| tl | 8 | 0.241 | 0.061 |
+
+Only 8 clips/language (small subset, no threshold yet per spec). en/es are
+strong; hi/tl are much weaker — this is a known limitation of Whisper
+`small` on Hindi and (especially) Tagalog, not a bug. Larger models
+(`large-v3-turbo`, GPU) should close most of this gap; worth re-running this
+exact report once GPU access is available, to see the real gap size.
+
+**Hallucination guard, silence + ESC-10 noise, same model** (`reports/hallucination-1790120120/`):
+
+| Category | Clips | Non-empty rate (post-guard) | Suppressions by reason |
+|---|---|---|---|
+| noise | 20 | 0.0% | avg_logprob: 9, no_speech_prob: 3 |
+| silence | 5 | 0.0% | no_speech_prob: 1 |
+
+0% non-empty rate post-guard on both — comfortably under the 1% target in
+SPEC.md Section 3. Small sample (25 clips total); worth re-running on a
+larger noise set before trusting this number for anything beyond "the guard
+isn't obviously broken."
+
+### Test and lint status
+
+- `uv run ruff check .`, `uv run ruff format --check .` — clean, all new
+  modules included.
+- `uv run mypy polyglot/core` (strict) — clean, unchanged (M2 code lives
+  outside `core/`, so it isn't mypy-strict-checked, matching the M0 scoping
+  decision to keep strict mode to `core/` only).
+- `uv run pytest` (default, network tests deselected) — 48 passed.
+- `uv run pytest -m network` (real downloaded data/models) — 4 passed:
+  Silero VAD detects real speech, faster-whisper transcribes it, LangIDTracker
+  detects English and a real code-switched en/es sentence.
+
+### Bugs found and fixed while building this
+
+- **`fasttext-wheel==0.9.2`'s single-string `predict()` is broken on
+  numpy>=2.0** (`np.array(probs, copy=False)` — the `copy=False` contract
+  changed in numpy 2.0). Worked around by always calling `predict([text],
+  k=...)` (the list-input path returns the raw C++ binding output and never
+  hits the broken line) and unwrapping the single result.
+- **`ruff format` was rewriting Python code fences inside `.md` files**,
+  which would have silently mutated `SPEC.md`/`CLAUDE.md`/`PROGRESS.md`.
+  Already excluded via `extend-exclude = ["*.md"]` from the M1 fix; confirmed
+  it still holds with the new files.
+- Not a bug, but a real environment gap worth recording: `datasets`' `Audio`
+  feature needs `torchcodec` to auto-decode, and `torchcodec` fails to load
+  its native library on this Windows machine (`OSError: Could not load...
+  libtorchcodec_image.dll`, almost certainly missing FFmpeg). Worked around
+  by loading the `audio` column with `Audio(decode=False)` (raw bytes) and
+  decoding with `soundfile` instead, which needs no FFmpeg. `torchcodec` was
+  removed from dependencies since nothing else needs it.
+
+### Decisions made / spec interpretations
+
+- **Silero VAD requires 512-sample (32ms) windows at 16kHz** — confirmed by
+  triggering the model's own `ValueError` on a smaller chunk. SPEC.md Section
+  8.1 says "20ms or 32ms windows (whatever the installed version requires)";
+  32ms it is.
+- **Noise dataset: ESC-10 subset of ESC-50, not the full ESC-50 set.** The
+  full ESC-50 dataset is CC BY-NC 3.0 (non-commercial); its ESC-10 subset is
+  separately licensed CC BY 3.0 (attribution only, commercial-compatible),
+  confirmed by reading ESC-50's LICENSE file. SPEC.md Section 10.2 delegates
+  picking "an openly licensed noise dataset" to whoever builds this — chose
+  ESC-10 for the clean, unambiguous license. Only 20 clips downloaded (2 per
+  ESC-10 category) to keep the download light; can pull more via
+  `scripts/download_datasets.py --only noise` if a larger sample is wanted.
+- **Pipeline (M1) is untouched — still fakes-only.** M2 delivers standalone,
+  independently-tested real components (VAD, ASR, hallucination guard,
+  LangIDTracker) plus eval scripts, not a rewired conversational `Pipeline`.
+  Wiring VAD-gated real ASR into `Pipeline` happens in M4 ("first full voice
+  turn"), alongside the LLM, TTS, and LiveKit adapter — doing it piecemeal
+  now would mean touching `Pipeline` twice for the same milestone's worth of
+  change, and M2's own accept criteria (WER report, hallucination report)
+  don't need a working `Pipeline` turn at all.
+- **`make eval-smoke` was deliberately NOT wired to `eval/asr_eval.py`/
+  `eval/hallucination_eval.py`**, even though it looks like a natural fit.
+  SPEC.md Section 15 explicitly assigns "CI smoke eval on PRs" to M7, and
+  that CI-facing version likely needs small *committed* fixtures for
+  determinism/speed rather than network-downloaded FLEURS data — different
+  enough from these dev-facing report scripts that wiring it now would
+  probably need re-wiring again in M7. Left as the M0 placeholder.
+- **M2's real-component tests only exercise English for the network-marked
+  integration test** (`test_real_audio_components.py`), not all four
+  languages — kept it to one clip to keep that test fast; the *actual*
+  per-language quality signal is the WER report above, run separately via
+  `eval/asr_eval.py --languages en es hi tl` (the default).
+- **fastText LID model: `lid.176.ftz`** (compressed, ~950KB), not the full
+  `lid.176.bin` (~126MB) — same predictions, much lighter for a CPU dev
+  loop. License is CC BY-SA 3.0, recorded in `docs/data_licenses.md`.
+
+### Unverified / deferred
+
+- **No GPU tested.** Everything above ran on CPU (`small`, int8) per the dev
+  profile described in SPEC.md Section 5. The `large-v3-turbo` GPU path is
+  unverified — needs the GPU decision (Modal recommended, still pending)
+  before it can be tried.
+- **`config/languages.yaml`'s hallucination blocklist is a seed, not tuned.**
+  0% non-empty rate on this small sample came mostly from the no_speech_prob/
+  avg_logprob checks, not the blocklist — the blocklist phrases haven't
+  actually been exercised against a hallucination yet. Revisit once a larger
+  noise/silence set surfaces real blocklist-worthy phrases.
+- **`FasterWhisperEngine`'s internal hallucination guard doesn't emit
+  suppression events** — no `EventLog` access from inside `ASREngine`
+  (Protocol doesn't include it). `eval/hallucination_eval.py` calls
+  `WhisperModel.transcribe()` + `check_hallucination()` directly instead of
+  going through `FasterWhisperEngine`, so this doesn't block the M2 report,
+  but real per-suppression event logging (SPEC.md 8.3: "log every suppression
+  as an event with the reason") is deferred to M4's pipeline wiring.
+- Common Voice and EdAcc/L2-ARCTIC (SPEC.md Section 10.2) not downloaded —
+  not needed for M2's accept criteria.
+
+### Next milestone
+
+M3: Knowledge base and retrieval — needs `config/sources.yaml` filled in by
+the human first (CLAUDE.md rule 6: do not invent KB URLs).
+
 ## M1: Pipeline skeleton and replay harness
 
 **Status:** complete, ready for human review.

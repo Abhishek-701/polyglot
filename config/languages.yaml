@@ -1,0 +1,28 @@
+# Per-language model routing and thresholds. See SPEC.md Section 6, 8.1, 8.3.
+#
+# Only hallucination_blocklist is populated for M2. vad, turn_detection, and
+# backchannels sections are added when those milestones (M5 tuning, M6
+# barge-in) need them.
+
+hallucination_blocklist:
+  # Seed list of common Whisper silence/noise hallucinations (SPEC.md 8.3).
+  # Needs tuning once eval/hallucination_eval.py has run against real
+  # silence/noise clips (see PROGRESS.md open questions).
+  en:
+    - "thank you for watching"
+    - "thanks for watching"
+    - "please subscribe"
+    - "subtitles by"
+    - "translated by"
+    - "see you next time"
+    - "bye bye"
+  es:
+    - "gracias por ver"
+    - "suscríbete"
+    - "subtítulos por"
+  hi:
+    - "देखने के लिए धन्यवाद"
+    - "सब्सक्राइब करें"
+  tl:
+    - "salamat sa panonood"
+    - "mag-subscribe"

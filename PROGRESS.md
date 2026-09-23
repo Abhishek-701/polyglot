@@ -2,12 +2,13 @@
 
 ## M4: First full voice turn (naive profile) — IN PROGRESS
 
-**Status: dialogue policy done and tested (LLM client, mock tools, intent
-classifier, prompt assembly, history compaction, grounding guard, full
-LangGraph graph). Still to do: TTS router/engines + language matrix doc,
-compliance greeting, LiveKit adapter, web client, wiring it all into
-`core/pipeline.py`, and the naive baseline latency report.** This section
-will be filled in fully once the milestone is complete; recording the
+**Status: dialogue policy AND TTS done and tested (LLM client, mock tools,
+intent classifier, prompt assembly, history compaction, grounding guard,
+full LangGraph graph, clause splitter, Kokoro engine + router, TTS language
+matrix, compliance greeting). Still to do: LiveKit adapter, web client,
+wiring it all into `core/pipeline.py`, and the naive baseline latency
+report.** This section will be filled in fully once the milestone is
+complete; recording the
 first half now since it's a natural commit boundary.
 
 ### LLM backend: Anthropic Claude, not vLLM/Qwen — a real decision, not a default
@@ -97,14 +98,55 @@ caller picks up `.env` without repeating that call everywhere.
   streaming text, real tool-call extraction, protocol conformance, missing-key
   error).
 
+### TTS: clause splitter, Kokoro engine, router, language matrix
+
+- `polyglot/tts/clause_splitter.py` — `full`/`sentence`/`clause` chunking
+  modes (SPEC.md 8.12), Devanagari danda (।) treated as a boundary for
+  Hindi. The tricky part: LLM stream deltas split mid-word, so only
+  complete whitespace-delimited words ever leave the raw buffer — a
+  Hypothesis property test (SPEC.md Section 14 asks for one here
+  specifically) checks that word sequences reconstruct correctly no matter
+  how the same text is chopped into deltas, across all three modes.
+- `polyglot/tts/kokoro_engine.py` + `polyglot/tts/router.py` —
+  `KokoroEngine` (en/es/hi) wrapped by a language-keyed `TTSRouter`.
+- `docs/tts_language_matrix.md` — the M4-required deliverable. **Real
+  finding:** none of SPEC.md's three named TTS engines (CosyVoice2, Kokoro,
+  Piper) support Tagalog — checked directly against each project's
+  published language list, not assumed. CosyVoice2 doesn't cover Spanish
+  or Hindi either (Chinese/English/Japanese/Korean only), so it isn't a
+  realistic primary engine for this project's 4 languages regardless of
+  hardware. **Real measured TTFB on this CPU (AMD Ryzen 7 7800X3D):**
+  Kokoro en 765ms, es 782ms, hi 1000ms — each already exceeds or nearly
+  exceeds SPEC.md Section 3's 500ms p50 perceived-latency target on its
+  own, before ASR/retrieval/LLM time is added. A real bottleneck, not a
+  minor one; unverified whether GPU inference fixes it (no GPU tested).
+- `polyglot/compliance/disclosure.py` — `build_greeting()`: English AI
+  disclosure + short per-language prompts (SPEC.md 8.14). Only builds the
+  text; logging the `disclosure` event is session-start orchestration's
+  job (not built into this module, same pattern as `hallucination_guard.py`
+  not doing its own event logging).
+- Tests: `test_clause_splitter.py` (incl. the Hypothesis property test),
+  `test_tts_router.py`, `test_disclosure.py`, and
+  `tests/integration/test_kokoro_engine.py` (`@pytest.mark.network`: real
+  synthesis for en/es/hi, confirms it raises for Tagalog).
+
 ### Test and lint status
 
 - `uv run ruff check .`, `uv run ruff format --check .` — clean.
-- `uv run mypy polyglot/core` (strict) — clean, unchanged (M4 policy/LLM
+- `uv run mypy polyglot/core` (strict) — clean, unchanged (M4 policy/LLM/TTS
   code lives outside `core/`).
-- `uv run pytest` (network deselected) — 93 passed.
-- `uv run pytest -m network` — 11 passed (7 from M2/M3 + 4 new Claude
-  client tests).
+- `uv run pytest` (network deselected) — 106 passed.
+- `uv run pytest -m network` — 15 passed (11 from M2/M3/Claude-client + 4
+  new Kokoro engine tests).
+
+### Open question for the human (Tagalog TTS)
+
+No native TTS for Tagalog among the three engines SPEC.md names. Options,
+none chosen yet: (1) accept text-only responses for Tagalog callers (no
+spoken audio), (2) evaluate Meta's MMS-TTS (claims 1100+ languages,
+untested here), (3) reconsider the fourth-language choice. Needs a human
+decision before M4's "hold a spoken conversation" checkpoint can include
+Tagalog.
 
 ## M3: Knowledge base and retrieval
 

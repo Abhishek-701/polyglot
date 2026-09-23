@@ -24,6 +24,7 @@ dependencies = [
     "anthropic>=1.8.0",
     "python-dotenv>=1.2",
     "langgraph>=1.0,<2",
+    "kokoro>=0.9.4",
 ]
 
 [tool.uv.sources]

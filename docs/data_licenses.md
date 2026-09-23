@@ -21,6 +21,7 @@ CLAUDE.md's data rules. Update this file whenever a new one is added.
 | Southwest Contract of Carriage | Knowledge base document (M3) | Airline's own terms; used for RAG grounding only, not redistributed | https://www.southwest.com/swa-resources/pdfs/corporate-commitments/contract-of-carriage.pdf |
 | MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 | Zero-shot intent classification (M4) | MIT | https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 |
 | Anthropic Claude (`claude-haiku-4-5-20251001`) | LLM turn generation (M4) | Hosted API, not a downloaded model — no local weights, governed by Anthropic's commercial terms of service rather than an open license | https://www.anthropic.com |
+| Kokoro-82M (`hexgrad/Kokoro-82M`) | TTS, en/es/hi (M4) | Apache 2.0 | https://huggingface.co/hexgrad/Kokoro-82M |
 
 Not yet used, listed here as a placeholder for when they're added:
 

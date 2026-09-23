@@ -26,8 +26,10 @@ CACHE_DIR = REPO_ROOT / "data" / "cache"
 
 LID_MODEL_URL = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
 
-# google/fleurs config name per language (SPEC.md fourth language: Tagalog / fil_ph).
-FLEURS_CONFIGS = {"en": "en_us", "es": "es_419", "hi": "hi_in", "tl": "fil_ph"}
+# google/fleurs config name per language. Fourth language swapped from
+# Tagalog (fil_ph) to Mandarin (cmn_hans_cn) in M4 — no TTS engine
+# evaluated supports Tagalog; see docs/tts_language_matrix.md.
+FLEURS_CONFIGS = {"en": "en_us", "es": "es_419", "hi": "hi_in", "zh": "cmn_hans_cn"}
 
 ESC50_META_URL = "https://raw.githubusercontent.com/karolpiczak/ESC-50/master/meta/esc50.csv"
 ESC50_AUDIO_URL = "https://raw.githubusercontent.com/karolpiczak/ESC-50/master/audio/{filename}"

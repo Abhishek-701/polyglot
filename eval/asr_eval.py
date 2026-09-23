@@ -4,7 +4,7 @@ SPEC.md Section 11.3 / M2 accept criterion: "per-language WER report on a
 FLEURS subset (reported, no threshold yet)". Requires
 `uv run python scripts/download_datasets.py --only fleurs` first.
 
-Usage: uv run python -m eval.asr_eval [--languages en es hi tl]
+Usage: uv run python -m eval.asr_eval [--languages en es hi zh]
 """
 
 import argparse
@@ -35,7 +35,7 @@ def load_manifest(lang: str) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--languages", nargs="+", default=["en", "es", "hi", "tl"])
+    parser.add_argument("--languages", nargs="+", default=["en", "es", "hi", "zh"])
     parser.add_argument("--model-size", default="small")
     parser.add_argument("--compute-type", default="int8")
     args = parser.parse_args()
@@ -68,7 +68,8 @@ def main() -> None:
         "|---|---|---|---|",
     ]
     for result in results:
-        lines.append(f"| {result.lang} | {result.n_clips} | {result.wer:.3f} | {result.cer:.3f} |")
+        wer_str = f"{result.wer:.3f}" if result.wer is not None else "N/A (no word boundaries)"
+        lines.append(f"| {result.lang} | {result.n_clips} | {wer_str} | {result.cer:.3f} |")
 
     (run_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (run_dir / "metrics.json").write_text(

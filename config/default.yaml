@@ -7,4 +7,6 @@ languages:
   - en
   - es
   - hi
-  - tl
+  - zh # swapped from Tagalog in M4 — no TTS engine we evaluated supports
+      # Tagalog at all (docs/tts_language_matrix.md); Mandarin is covered
+      # by all three candidate engines. See PROGRESS.md M4.

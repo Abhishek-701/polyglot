@@ -21,14 +21,16 @@ CLAUDE.md's data rules. Update this file whenever a new one is added.
 | Southwest Contract of Carriage | Knowledge base document (M3) | Airline's own terms; used for RAG grounding only, not redistributed | https://www.southwest.com/swa-resources/pdfs/corporate-commitments/contract-of-carriage.pdf |
 | MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 | Zero-shot intent classification (M4) | MIT | https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 |
 | Anthropic Claude (`claude-haiku-4-5-20251001`) | LLM turn generation (M4) | Hosted API, not a downloaded model — no local weights, governed by Anthropic's commercial terms of service rather than an open license | https://www.anthropic.com |
-| Kokoro-82M (`hexgrad/Kokoro-82M`) | TTS, en/es/hi (M4) | Apache 2.0 | https://huggingface.co/hexgrad/Kokoro-82M |
+| Kokoro-82M (`hexgrad/Kokoro-82M`) | TTS, en/es/hi/zh (M4) | Apache 2.0 | https://huggingface.co/hexgrad/Kokoro-82M |
+| jieba | Mandarin word segmentation for Kokoro's `misaki[zh]` G2P (M4) | MIT | https://github.com/fxsjy/jieba |
+| pypinyin / pypinyin-dict | Mandarin pinyin conversion for Kokoro's `misaki[zh]` G2P (M4) | MIT | https://github.com/mozillazg/python-pinyin |
+| cn2an | Chinese number normalization for Kokoro's `misaki[zh]` G2P (M4) | MIT | https://github.com/Ailln/cn2an |
 
 Not yet used, listed here as a placeholder for when they're added:
 
 - Common Voice (Section 10.2, speaker variety) — requires accepting terms on
   HuggingFace; not downloaded yet.
 - EdAcc / L2-ARCTIC (accented English) — not downloaded yet.
-- Whichever TTS models M4 brings in next (CosyVoice2/Kokoro/Piper).
 
 **Note on NLLB-200-distilled-600M's license (CC BY-NC 4.0):** this is
 non-commercial. It's used here for query translation at inference time (the

@@ -11,4 +11,4 @@ def test_greeting_includes_all_other_languages() -> None:
     greeting = build_greeting()
     assert "español" in greeting
     assert "हिंदी" in greeting
-    assert "Tagalog" in greeting
+    assert "中文" in greeting

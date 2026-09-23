@@ -1,6 +1,6 @@
 # Polyglot
 
-Real-time cross-lingual voice agent (English, Spanish, Hindi, Tagalog) answering
+Real-time cross-lingual voice agent (English, Spanish, Hindi, Mandarin) answering
 airline disruption questions from an English policy corpus, with a measured
 latency ablation and a deterministic replay evaluation harness.
 

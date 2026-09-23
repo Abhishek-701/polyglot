@@ -80,3 +80,40 @@ def test_word_reconstruction_property(words: list[str], delta_size: int, mode: s
     deltas = [text[i : i + delta_size] for i in range(0, len(text), delta_size)] or [""]
     chunks = _run_split(deltas, mode=mode)
     assert " ".join(chunks).split() == words
+
+
+def test_mandarin_uses_full_width_punctuation_as_boundary() -> None:
+    text = "您的航班已取消。您有权获得全额退款。"
+    chunks = _run_split([text], mode="sentence", lang="zh", min_chunk_words=1)
+    assert chunks == ["您的航班已取消。", "您有权获得全额退款。"]
+
+
+def test_mandarin_joins_characters_without_spaces() -> None:
+    text = "您的航班已取消。"
+    chunks = _run_split([text], mode="full", lang="zh")
+    assert chunks == [text]
+    assert " " not in chunks[0]
+
+
+def test_mandarin_max_chunk_words_counts_characters() -> None:
+    text = "一二三四五六七八九十一二三四五六七八九十"  # 20 characters, no punctuation
+    chunks = _run_split([text], mode="clause", lang="zh", max_chunk_words=5)
+    assert all(len(chunk) <= 5 for chunk in chunks)
+    assert "".join(chunks) == text
+
+
+_CJK_CHAR = st.sampled_from(list("你好吗世界中文测试。！？，一二三四五六七八九十"))
+
+
+@given(
+    st.lists(_CJK_CHAR, min_size=5, max_size=40),
+    st.integers(min_value=1, max_value=5),
+    st.sampled_from(["full", "sentence", "clause"]),
+)
+def test_mandarin_character_reconstruction_property(
+    chars: list[str], delta_size: int, mode: str
+) -> None:
+    text = "".join(chars)
+    deltas = [text[i : i + delta_size] for i in range(0, len(text), delta_size)] or [""]
+    chunks = _run_split(deltas, mode=mode, lang="zh")
+    assert "".join(chunks) == text

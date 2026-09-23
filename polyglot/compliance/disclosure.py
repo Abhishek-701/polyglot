@@ -16,7 +16,7 @@ GREETING_EN = (
 _MULTILINGUAL_PROMPTS = {
     "es": "Puedes hablar conmigo en español.",
     "hi": "आप मुझसे हिंदी में भी बात कर सकते हैं।",
-    "tl": "Maaari ka ring makipag-usap sa akin sa Tagalog.",
+    "zh": "您也可以用中文和我交流。",
 }
 
 

@@ -28,4 +28,4 @@ def test_tuned_profile_flags() -> None:
 
 def test_languages_come_from_default() -> None:
     settings = load_settings("naive")
-    assert set(settings.languages) == {"en", "es", "hi", "tl"}
+    assert set(settings.languages) == {"en", "es", "hi", "zh"}

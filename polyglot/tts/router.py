@@ -3,8 +3,10 @@ language from languages.yaml." Composes multiple engines behind one
 `TTSEngine`-shaped interface, picking by language; the first engine in the
 list wins for any language more than one of them supports.
 
-No engine evaluated in M4 supports Tagalog — see docs/tts_language_matrix.md.
-A call for an unsupported language raises rather than silently failing.
+The fourth project language was swapped from Tagalog to Mandarin in M4
+because no engine evaluated supported Tagalog at all — see
+docs/tts_language_matrix.md. A call for an unsupported language raises
+rather than silently failing.
 """
 
 from collections.abc import AsyncIterator

@@ -6,9 +6,9 @@ Verified against installed transformers==5.17.0: the generic pipeline(
 (KeyError: Unknown task translation). Uses AutoModelForSeq2SeqLM.generate()
 directly instead. FLORES-200 language codes confirmed present in the
 installed facebook/nllb-200-distilled-600M tokenizer's vocab: eng_Latn,
-spa_Latn, hin_Deva, tgl_Latn (NLLB uses "tgl_Latn" for Tagalog; note this
-differs from FLEURS' "fil_ph" config name for the same language family —
-different datasets, different naming, both meaning Tagalog/Filipino).
+spa_Latn, hin_Deva, zho_Hans (Simplified Mandarin — the fourth language was
+swapped from Tagalog in M4 after no TTS engine we evaluated turned out to
+support it; see docs/tts_language_matrix.md and PROGRESS.md M4).
 """
 
 import asyncio
@@ -20,7 +20,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from polyglot.core.types import Passage
 from polyglot.retrieval.store import RetrievalStore
 
-NLLB_LANG_CODES = {"en": "eng_Latn", "es": "spa_Latn", "hi": "hin_Deva", "tl": "tgl_Latn"}
+NLLB_LANG_CODES = {"en": "eng_Latn", "es": "spa_Latn", "hi": "hin_Deva", "zh": "zho_Hans"}
 
 
 class Translator:

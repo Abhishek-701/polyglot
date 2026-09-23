@@ -8,8 +8,7 @@ full LangGraph graph, clause splitter, Kokoro engine + router, TTS language
 matrix, compliance greeting). Still to do: LiveKit adapter, web client,
 wiring it all into `core/pipeline.py`, and the naive baseline latency
 report.** This section will be filled in fully once the milestone is
-complete; recording the
-first half now since it's a natural commit boundary.
+complete; recording progress now since these are natural commit boundaries.
 
 ### LLM backend: Anthropic Claude, not vLLM/Qwen — a real decision, not a default
 
@@ -130,23 +129,100 @@ caller picks up `.env` without repeating that call everywhere.
   `tests/integration/test_kokoro_engine.py` (`@pytest.mark.network`: real
   synthesis for en/es/hi, confirms it raises for Tagalog).
 
+### Fourth language swapped: Tagalog -> Mandarin
+
+The TTS language matrix findings above (no engine supports Tagalog) went to
+the human as an open question; the human asked whether Mandarin would work
+instead. Verified before doing anything else: CosyVoice2's *primary*
+language is Mandarin, and Kokoro supports it (`lang_code='z'`) — confirmed
+with a real synthesis call, not just a documentation check. Piper still has
+no Mandarin voice, but 2 of 3 engines covering it beats 0 of 3 for Tagalog,
+so the human confirmed the swap.
+
+What changed, in order:
+
+1. **`polyglot/tts/clause_splitter.py` needed a real fix, not just a config
+   change.** Mandarin has no spaces between words, and uses full-width
+   punctuation (。！？，；：) instead of ASCII. The existing word-count-based
+   chunking logic would have treated an entire Mandarin response as one
+   unsplittable "word." Added a `lang` parameter: for `zh`, units are
+   individual characters (not whitespace-delimited words) and chunks are
+   joined with `""` instead of `" "` — joining Chinese characters with
+   spaces would be visibly wrong output, not just a minor formatting
+   choice. Added a character-level Hypothesis property test alongside the
+   existing word-level one (11 tests total now, up from 7).
+2. **`misaki[zh]` needs 5 extra packages** (`cn2an`, `jieba`, `ordered-set`,
+   `pypinyin`, `pypinyin-dict`) beyond what `misaki[en]` needed — missing
+   `ordered_set` surfaced as an import error on first attempt. Added to
+   `pyproject.toml` as real dependencies (were briefly installed ad hoc to
+   verify feasibility first, then made permanent once the human confirmed).
+   `jieba` builds a word-segmentation dictionary on first use (~0.4s,
+   confirmed one-time per process — measured a second call at 843ms vs. an
+   apparent 2172ms "cold" first measurement, and excluded the dict-build
+   cost from the TTFB number reported in the language matrix).
+3. Updated `config/default.yaml` (language list), `config/languages.yaml`
+   (hallucination blocklist — real Whisper Mandarin hallucination phrases:
+   "感谢观看", "请订阅", "字幕由", "下期再见"), `polyglot/retrieval/bridges/mt_bridge.py`
+   (NLLB code `tgl_Latn` -> `zho_Hans`, confirmed present in the tokenizer
+   vocab), `scripts/download_datasets.py` (FLEURS config `fil_ph` ->
+   `cmn_hans_cn`, confirmed present in FLEURS' own config list),
+   `polyglot/tts/kokoro_engine.py` (added `zh`/`z`/`zf_xiaobei`),
+   `polyglot/policy/graph.py` (clarify/handoff text and handoff trigger
+   phrases in Mandarin), `polyglot/compliance/disclosure.py` (Mandarin
+   greeting prompt), `polyglot/fakes.py` (`FakeTTSEngine.languages`),
+   README.md, and every test that referenced `tl`/Tagalog.
+4. **Downloaded the real Mandarin FLEURS subset and re-ran the ASR eval —
+   found a second real bug in the process**, not related to the language
+   swap mechanics but only surfaced by actually running it:
+
+### Bug: FLEURS' Mandarin reference text breaks word-level WER
+
+Re-running `eval/asr_eval.py` with real Mandarin data initially reported
+**WER 0.996** — essentially "completely wrong" — which didn't match manual
+inspection of the actual transcript pairs (mostly correct, one real
+mistranscription). Root cause, found by printing the raw reference and
+hypothesis side by side: FLEURS' Mandarin `transcription` field puts a
+space between **every single character** (`"这 并 不 是 告 别..."`), while
+real ASR output has no spaces at all (`"这并不是告别..."`, correct
+Chinese writing). Word-level WER treats FLEURS' 23 space-separated
+characters as 23 "words" and Whisper's un-spaced output as **one single
+"word"** — nearly every comparison fails structurally, regardless of
+actual transcription quality. The same spurious spaces were also inflating
+CER (0.522), since jiwer's character-level edit distance was aligning
+against a reference padded with 22 extra space characters.
+
+Fixed in `eval/metrics/asr.py`: added `NO_WORD_BOUNDARY_LANGUAGES = {"zh"}`;
+for these languages, `normalize()` strips whitespace entirely (not just
+collapses it) before computing CER, and WER isn't computed at all — it's
+not a meaningful metric without word boundaries, which is standard practice
+for CJK ASR evaluation (CER-only), not something invented for this
+project. Re-ran after the fix: **Mandarin CER dropped from 0.522 to
+0.133** — a real, sane number in the same ballpark as Hindi. Added
+`tests/unit/test_asr_metrics.py` (8 tests) proving the FLEURS-style-spacing
+case specifically, so this can't silently regress.
+
+### Real FLEURS/Mandarin ASR numbers (re-run after both fixes)
+
+| Language | Clips | WER | CER |
+|---|---|---|---|
+| en | 8 | 0.058 | 0.024 |
+| es | 8 | 0.043 | 0.008 |
+| hi | 8 | 0.433 | 0.165 |
+| zh | 8 | N/A (no word boundaries) | 0.133 |
+
+(en/es/hi numbers re-measured after the Mandarin fix too, to confirm it
+didn't change anything for space-delimited languages — it didn't, values
+match the M2 report to 3 decimal places modulo hi's normal run-to-run
+noise from beam search.)
+
 ### Test and lint status
 
 - `uv run ruff check .`, `uv run ruff format --check .` — clean.
 - `uv run mypy polyglot/core` (strict) — clean, unchanged (M4 policy/LLM/TTS
   code lives outside `core/`).
-- `uv run pytest` (network deselected) — 106 passed.
-- `uv run pytest -m network` — 15 passed (11 from M2/M3/Claude-client + 4
-  new Kokoro engine tests).
-
-### Open question for the human (Tagalog TTS)
-
-No native TTS for Tagalog among the three engines SPEC.md names. Options,
-none chosen yet: (1) accept text-only responses for Tagalog callers (no
-spoken audio), (2) evaluate Meta's MMS-TTS (claims 1100+ languages,
-untested here), (3) reconsider the fourth-language choice. Needs a human
-decision before M4's "hold a spoken conversation" checkpoint can include
-Tagalog.
+- `uv run pytest` (network deselected) — 118 passed.
+- `uv run pytest -m network` — 16 passed (12 from M2/M3/Claude-client + 4
+  Kokoro engine tests, now covering en/es/hi/zh).
 
 ## M3: Knowledge base and retrieval
 

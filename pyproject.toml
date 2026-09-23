@@ -25,6 +25,11 @@ dependencies = [
     "python-dotenv>=1.2",
     "langgraph>=1.0,<2",
     "kokoro>=0.9.4",
+    "cn2an>=0.5",
+    "jieba>=0.42",
+    "ordered-set>=4",
+    "pypinyin>=0.55",
+    "pypinyin-dict>=0.9",
 ]
 
 [tool.uv.sources]

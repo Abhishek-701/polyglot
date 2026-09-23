@@ -50,5 +50,5 @@ def test_languages_is_the_union() -> None:
 
 async def test_unsupported_language_raises() -> None:
     router = TTSRouter([_StubEngine({"en"}, "a")])
-    with pytest.raises(ValueError, match="tl"):
-        await _collect(router.synthesize(_one_chunk(), "tl", "voice"))
+    with pytest.raises(ValueError, match="xx"):
+        await _collect(router.synthesize(_one_chunk(), "xx", "voice"))

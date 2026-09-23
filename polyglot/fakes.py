@@ -93,7 +93,7 @@ class FakeLLMClient:
 
 
 class FakeTTSEngine:
-    languages: set[str] = {"en", "es", "hi", "tl"}
+    languages: set[str] = {"en", "es", "hi", "zh"}
 
     async def synthesize(
         self, chunks: AsyncIterator[str], lang: str, voice: str

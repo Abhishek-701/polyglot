@@ -15,7 +15,10 @@ async def _one_chunk(text: str) -> AsyncIterator[str]:
     yield text
 
 
-@pytest.mark.parametrize("lang,text", [("en", "Hello there."), ("es", "Hola."), ("hi", "नमस्ते।")])
+@pytest.mark.parametrize(
+    "lang,text",
+    [("en", "Hello there."), ("es", "Hola."), ("hi", "नमस्ते।"), ("zh", "你好。")],
+)
 async def test_synthesizes_real_audio(lang: str, text: str) -> None:
     engine = KokoroEngine()
     frames = [frame async for frame in engine.synthesize(_one_chunk(text), lang, "")]

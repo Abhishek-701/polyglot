@@ -47,7 +47,7 @@ def test_check_coverage_passes_when_targets_met() -> None:
     # 4 languages x 50 items = 200 total; es/hi get >=20% code-switched;
     # overall >=15% unanswerable.
     items = []
-    for lang in ("en", "es", "hi", "tl"):
+    for lang in ("en", "es", "hi", "zh"):
         for i in range(50):
             code_switched = lang in ("es", "hi") and i < 15  # 30% of 50
             answerable = i >= 8  # 84% answerable -> 16% unanswerable

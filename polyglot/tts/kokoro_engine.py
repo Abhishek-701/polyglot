@@ -1,12 +1,15 @@
 """Kokoro-82M TTS engine. See SPEC.md Section 8.12 / Section 5.
 
 Verified against installed kokoro==0.9.4: `KPipeline(lang_code=...)` with
-`'a'` (English), `'e'` (Spanish), `'h'` (Hindi) all produced real audio on
-CPU in testing, with no espeak-ng install needed (VOICES.md lists
-espeak-ng as a fallback phonemizer; misaki's bundled G2P handled all three
-without it here — not something to assume holds on every machine, since
-that fallback path wasn't exercised). No Tagalog support at all — see
-docs/tts_language_matrix.md.
+`'a'` (English), `'e'` (Spanish), `'h'` (Hindi), `'z'` (Mandarin) all
+produced real audio on CPU in testing. No espeak-ng install needed for
+en/es/hi (VOICES.md lists it as a fallback phonemizer; misaki's bundled
+G2P handled all three without it here — not something to assume holds on
+every machine, since that fallback path wasn't exercised). Mandarin needs
+the `misaki[zh]` extras (`cn2an`, `jieba`, `ordered-set`, `pypinyin`,
+`pypinyin-dict` — see pyproject.toml); `jieba` builds a word-segmentation
+dictionary on first use (one-time ~0.4s cost per process, not per-turn
+latency — excluded from the TTFB numbers in docs/tts_language_matrix.md).
 
 CPU inference blocks, so synthesis runs in the default executor per
 CLAUDE.md's "nothing blocking on the audio path" rule. Output stays at
@@ -25,8 +28,8 @@ from polyglot.core.types import AudioFrame
 
 SAMPLE_RATE = 24000
 
-_LANG_CODES = {"en": "a", "es": "e", "hi": "h"}
-_DEFAULT_VOICES = {"en": "af_heart", "es": "ef_dora", "hi": "hf_alpha"}
+_LANG_CODES = {"en": "a", "es": "e", "hi": "h", "zh": "z"}
+_DEFAULT_VOICES = {"en": "af_heart", "es": "ef_dora", "hi": "hf_alpha", "zh": "zf_xiaobei"}
 
 
 class KokoroEngine:

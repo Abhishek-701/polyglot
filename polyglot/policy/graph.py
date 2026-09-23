@@ -60,14 +60,14 @@ _CLARIFY_TEXT = {
     "en": "Could you tell me a bit more about what you need help with?",
     "es": "¿Podrías contarme un poco más sobre en qué necesitas ayuda?",
     "hi": "क्या आप बता सकते हैं कि आपको किस बारे में मदद चाहिए?",
-    "tl": "Maaari mo bang sabihin nang kaunti pa kung ano ang kailangan mong tulong?",
+    "zh": "您能再多告诉我一些您需要什么帮助吗？",
 }
 
 _HANDOFF_TEXT = {
     "en": "Let me connect you with a member of our team who can help further.",
     "es": "Permíteme conectarte con un miembro de nuestro equipo que pueda ayudarte más.",
     "hi": "मुझे आपको हमारी टीम के किसी सदस्य से जोड़ने दीजिए जो आगे मदद कर सके।",
-    "tl": "Hayaan mong ikonekta kita sa isang miyembro ng aming koponan na makakatulong pa.",
+    "zh": "让我为您转接一位团队成员，为您提供进一步帮助。",
 }
 
 _HANDOFF_TRIGGERS = (
@@ -77,6 +77,8 @@ _HANDOFF_TRIGGERS = (
     "representative",
     "hablar con una persona",
     "agente humano",
+    "人工客服",
+    "转人工",
 )
 
 

@@ -1,0 +1,38 @@
+[
+  {
+    "confirmation_code": "ABC123",
+    "last_name": "Garcia",
+    "passenger_name": "Maria Garcia",
+    "flight_number": "AA100",
+    "date": "2026-09-25",
+    "origin": "JFK",
+    "destination": "LAX",
+    "status": "confirmed",
+    "fare_class": "economy",
+    "refundable": false
+  },
+  {
+    "confirmation_code": "DEF456",
+    "last_name": "Smith",
+    "passenger_name": "John Smith",
+    "flight_number": "DL200",
+    "date": "2026-09-26",
+    "origin": "ATL",
+    "destination": "ORD",
+    "status": "cancelled",
+    "fare_class": "economy",
+    "refundable": true
+  },
+  {
+    "confirmation_code": "GHI789",
+    "last_name": "Patel",
+    "passenger_name": "Raj Patel",
+    "flight_number": "WN300",
+    "date": "2026-09-27",
+    "origin": "DAL",
+    "destination": "MDW",
+    "status": "confirmed",
+    "fare_class": "business_select",
+    "refundable": true
+  }
+]

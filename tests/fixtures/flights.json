@@ -1,0 +1,34 @@
+[
+  {
+    "flight_number": "AA100",
+    "date": "2026-09-25",
+    "origin": "JFK",
+    "destination": "LAX",
+    "status": "on_time",
+    "scheduled_departure": "2026-09-25T08:00:00-04:00",
+    "scheduled_arrival": "2026-09-25T11:15:00-07:00",
+    "delay_minutes": 0
+  },
+  {
+    "flight_number": "DL200",
+    "date": "2026-09-26",
+    "origin": "ATL",
+    "destination": "ORD",
+    "status": "cancelled",
+    "scheduled_departure": "2026-09-26T14:30:00-04:00",
+    "scheduled_arrival": "2026-09-26T15:50:00-05:00",
+    "delay_minutes": null,
+    "cancellation_reason": "weather"
+  },
+  {
+    "flight_number": "WN300",
+    "date": "2026-09-27",
+    "origin": "DAL",
+    "destination": "MDW",
+    "status": "delayed",
+    "scheduled_departure": "2026-09-27T10:00:00-05:00",
+    "scheduled_arrival": "2026-09-27T12:20:00-05:00",
+    "delay_minutes": 95,
+    "delay_reason": "mechanical"
+  }
+]

@@ -1,5 +1,111 @@
 # Progress
 
+## M4: First full voice turn (naive profile) — IN PROGRESS
+
+**Status: dialogue policy done and tested (LLM client, mock tools, intent
+classifier, prompt assembly, history compaction, grounding guard, full
+LangGraph graph). Still to do: TTS router/engines + language matrix doc,
+compliance greeting, LiveKit adapter, web client, wiring it all into
+`core/pipeline.py`, and the naive baseline latency report.** This section
+will be filled in fully once the milestone is complete; recording the
+first half now since it's a natural commit boundary.
+
+### LLM backend: Anthropic Claude, not vLLM/Qwen — a real decision, not a default
+
+SPEC.md Section 5 names `Qwen2.5-7B-Instruct` via vLLM (self-hosted) or a
+hosted OpenAI-compatible endpoint as alternative. Neither was available
+(GPU/Modal decision from M0 never got acted on; no OpenAI-compatible key).
+The user has an Anthropic API key and asked whether that could work instead
+— yes: `core/interfaces.py`'s `LLMClient` Protocol is backend-agnostic by
+design (`stream(messages, tools) -> AsyncIterator[LLMDelta]`), so swapping
+the concrete backend doesn't touch anything else. Model: `claude-haiku-4-5-20251001`,
+chosen over Sonnet for TTFT given the <800ms perceived-latency target (user
+confirmed this tradeoff explicitly).
+
+`polyglot/llm/client.py` (`ClaudeLLMClient`) verified against installed
+anthropic==1.8.0 by hand before writing tests: streaming text arrives as
+`anthropic.lib.streaming.TextEvent`; `stream.get_final_message()` returns
+fully-parsed `ToolUseBlock.input` directly, no manual partial-JSON
+accumulation needed. Tool calling is used for single-turn parameter
+extraction only (e.g. pulling `flight_number` out of an utterance), never a
+multi-turn tool_use/tool_result thread — `core/types.py`'s `Message` has no
+`tool_use_id` field to thread that through, and SPEC.md 8.9 already splits
+`tool_call` and `generate` into separate graph nodes, implying the tool
+result gets folded into the next prompt, not preserved as a formal
+tool-result message.
+
+API key handling: the user pasted the real key directly in chat. Wrote it
+straight to `.env` (gitignored, confirmed via `git check-ignore`) rather
+than echoing it back or writing it anywhere else; flagged that pasting a
+key in chat puts it in the session transcript in case they want to rotate
+it. `polyglot/llm/client.py` calls `load_dotenv()` at import time so every
+caller picks up `.env` without repeating that call everywhere.
+
+### What was built
+
+- `polyglot/llm/client.py` — `ClaudeLLMClient`, described above.
+- `tests/fixtures/{bookings,flights}.json` + `polyglot/tools/{booking,flight_status}.py` —
+  mock tools per SPEC.md Section 8.15. `flight_status` also has an
+  unimplemented `provider="opensky"` stub (spec marks the real adapter
+  optional; mock is always used in eval anyway).
+- `polyglot/policy/intents.py` — zero-shot intent classification
+  (`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`). **Real
+  finding, hand-verified before writing any code around it:** SPEC.md
+  8.9's bare label words ("refund", "smalltalk", ...) score very poorly
+  with this model — an obvious refund request scored "smalltalk" highest.
+  Descriptive label phrases plus a domain-specific hypothesis template
+  measurably improved accuracy (5/7 vs. clearly-wrong before on a small
+  hand-written check) but confidence stays modest (0.2-0.35) even when
+  correct — expected per SPEC.md's own "this is expected to be imperfect"
+  framing; real handling is confidence-floor routing to `clarify`
+  (`policy/graph.py`), not further prompt tweaking.
+- `polyglot/policy/prompts.py` — naive vs. `prefix_cache_prompt_order`
+  message ordering (SPEC.md 8.10), plus the system prompt rules (grounded
+  answers only, cite source doc, plain "not covered" admission, <3
+  sentences, respond in caller's language, no markdown/lists).
+- `polyglot/policy/compaction.py` — keep-last-6 + async summarization
+  (SPEC.md 8.10); `summarize_older_turns` is meant to run as a background
+  task, never awaited on a turn's own critical path.
+- `polyglot/policy/guard.py` — inline grounding check (SPEC.md 8.9):
+  extracts money/percentage/day-count figures the assistant claimed, fails
+  if any aren't verbatim in the retrieved passages, falls back to a safe
+  hedge. Deliberately a cheap regex/string check, not another model call —
+  catches fabricated numbers specifically, not fabricated reasoning in
+  general (documented limitation, not a bug).
+- `polyglot/policy/graph.py` — the LangGraph dialogue policy itself:
+  `classify_intent` routes (via a plain, non-async router function) to
+  `handoff` (keyword-triggered, e.g. "speak to a human", independent of
+  intent), `clarify` (confidence below floor), `tool_call`
+  (flight_status/booking_lookup — extracts params via the LLM, then calls
+  the actual mock tool), `retrieve` (refund/rebooking/compensation/baggage/other),
+  or straight to `generate` (smalltalk, skips retrieval). `retrieve`/`tool_call`
+  both feed into `generate` -> `guard` -> END. `intent_classifier` is an
+  injectable parameter specifically so tests don't need the real model
+  loaded (see tests below).
+- Hand-verified the full graph end to end with the real Claude client and
+  real pgvector retriever (against the M3 corpus) before writing automated
+  tests — real refund/flight-status/booking-lookup/smalltalk/handoff
+  queries all routed and answered correctly; one smalltalk message ("Hi,
+  how are you?") got misclassified as `flight_status` but the tool_call
+  node's "no matching record" fallback kept the response reasonable anyway
+  — a real, honest limitation of the intent classifier, not a crash.
+- Tests: `test_guard.py`, `test_prompts.py`, `test_compaction.py`,
+  `test_tools.py`, and `tests/integration/test_policy_graph.py` (full graph
+  routing through every path, entirely fake LLM/retriever/intent-classifier
+  — no network needed for routing-logic correctness) plus
+  `tests/integration/test_claude_client.py` (`@pytest.mark.network`: real
+  streaming text, real tool-call extraction, protocol conformance, missing-key
+  error).
+
+### Test and lint status
+
+- `uv run ruff check .`, `uv run ruff format --check .` — clean.
+- `uv run mypy polyglot/core` (strict) — clean, unchanged (M4 policy/LLM
+  code lives outside `core/`).
+- `uv run pytest` (network deselected) — 93 passed.
+- `uv run pytest -m network` — 11 passed (7 from M2/M3 + 4 new Claude
+  client tests).
+
 ## M3: Knowledge base and retrieval
 
 **Status: infrastructure complete, real corpus ingested, still blocked on

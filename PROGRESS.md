@@ -2,11 +2,85 @@
 
 ## M3: Knowledge base and retrieval
 
-**Status: partially complete, blocked on human input.** All retrieval
-infrastructure is built and tested; the milestone's actual accept criteria
-(a real recall@k table, an ADR naming the chosen default bridge) cannot be
-produced honestly yet — see "Blocked" below. Per CLAUDE.md rule 5, stopping
-here rather than faking numbers.
+**Status: infrastructure complete, real corpus ingested, still blocked on
+the golden set.** `config/sources.yaml` is now filled in with 5 verified
+real URLs (below) and the real corpus has been ingested into pgvector.
+M3's formal accept criteria (a real recall@k table, an ADR naming the
+chosen default bridge) still can't be produced honestly — they need a
+human-reviewed golden set, which needs a working LLM to draft candidates
+from (M4) or manual authoring — see "Blocked" below.
+
+### config/sources.yaml filled in, real ingestion run
+
+The human asked for KB URLs to be searched rather than provided directly.
+Per CLAUDE.md rule 6 (Claude Code doesn't invent KB URLs) every candidate
+was verified by actually fetching it and running it through
+`polyglot/retrieval/extract.py` — not just checked by eye — before being
+added. Rejected candidates and why:
+
+- **EUR-Lex's raw EU261 legal text** (`eur-lex.europa.eu/legal-content/...`)
+  returns HTTP 202 with an empty body to a plain GET, consistently, across
+  several URL variants. Used the EU's official "Your Europe" citizen-portal
+  summary instead (SPEC.md 10.1 explicitly allows "EU261 text **or an
+  official summary**") — extracts cleanly into 47 real sections.
+- **United's Contract of Carriage page** renders 0 usable sections — a JS
+  app with no server-rendered content, confirmed by fetching and running
+  our own extractor against it, not by assumption.
+- **A dedicated DOT refund-rule page** (`transportation.gov/airconsumer/refundsfinalruleapril2024`)
+  extracts to ~1400 characters, almost all boilerplate — the actual rule
+  text isn't in the page shell. Used DOT's "Fly Rights" guide instead,
+  which extracts to 20 real sections including "Delayed and Cancelled
+  Flights" and "Contract Terms" and covers refunds within them.
+
+Final 5 sources (`config/sources.yaml`): `dot-fly-rights`,
+`eu261-air-passenger-rights`, `american-airlines-conditions-of-carriage`,
+`delta-contract-of-carriage-domestic`, `southwest-contract-of-carriage`.
+
+Real `python -m polyglot.retrieval.ingest` run: 246 chunks total (61 + 40 +
+41 + 47 + 57). Spot-checked retrieval quality with `MultilingualBridge`
+against the real ingested corpus — a Spanish query ("¿Puedo obtener un
+reembolso por mi vuelo cancelado?") correctly retrieves DOT/American/EU261
+refund and cancellation passages with cosine scores 0.70-0.75; an English
+EU-delay question correctly surfaces the EU261 compensation-amount table
+section. Not a golden-set recall@k number, but real evidence the corpus and
+bridges work together correctly.
+
+Three real bugs found and fixed while doing this (all in
+`polyglot/retrieval/ingest.py`):
+
+- **Chunk ids collided across sections.** `chunk_section()` restarts
+  `chunk_index` at 0 for every section it's called on; `ingest_document`
+  was calling it once per extracted section and using each chunk's own
+  (section-local) index directly as the store's global chunk index —
+  section 2's first chunk got the same id as section 1's first chunk
+  (`doc_id#0`), and `upsert_document` hit a real `UniqueViolation` on the
+  first live ingest run. Fixed by renumbering chunks globally per document
+  in `ingest_document` (`enumerate()` over the combined chunk list) rather
+  than trusting `chunk.chunk_index`.
+- **`transportation.gov` 403'd our original UA string** (`"polyglot-ingest/0.1"`
+  alone). A `"Mozilla/5.0 (Windows NT 10.0; Win64; x64) polyglot-ingest/0.1"`
+  string works reliably; a fuller Chrome/AppleWebKit-spoofing UA string
+  intermittently got 403'd on a *different* source (American) — picked the
+  simpler string that passed all 5 sources consistently rather than the
+  more elaborate one.
+- **Content-hash idempotency was hashing raw response bytes**, which some
+  sites (confirmed on American's page) vary on every request — likely
+  nonces/timestamps in unrelated `<script>` tags — even though the real
+  policy text is byte-identical. Every re-ingest was reported as "changed"
+  for that source. Fixed by hashing the *extracted* text instead of the raw
+  bytes; verified two fetches of American's page produce different raw
+  bytes but identical extracted text.
+
+A fourth bug — this one in the test suite — surfaced after ingesting the
+real corpus: `tests/integration/test_retrieval_bridges.py`'s synthetic
+fixture used realistic-sounding refund language ("Passengers whose flights
+are cancelled..."), which worked fine against an empty test DB but started
+losing to the now-present real KB content in the top-k for a
+realistic-sounding query — correct retrieval behavior, broken test
+assumption. Fixed by rewriting the fixture and query with invented
+brand/policy terms ("Zyloport", "Flexipass", "Category Nine") that can't
+semantically collide with anything real, regardless of what else is in the
+shared dev database. All 7 network tests pass again with the real KB loaded.
 
 ### What was built
 
@@ -124,35 +198,31 @@ here rather than faking numbers.
 
 ### Blocked
 
-- **`config/sources.yaml` is empty.** CLAUDE.md rule 6 and SPEC.md Section
-  10.1 are explicit: the human fills this in, Claude Code does not invent
-  knowledge-base URLs. Needed: US DOT refund/delay rules, EU261 text or an
-  official summary, and three airline Contracts of Carriage (SPEC.md Section
-  1.2). `polyglot/retrieval/ingest.py` refuses to run until this has real
-  entries.
-- **Without a real ingested corpus, there's no real golden set** (Section
-  10.3's `expected_passage_ids` must reference real chunk ids, which only
-  exist after ingestion) **and therefore no real recall@k table** — M3's
-  actual accept criterion. `eval/retrieval_eval.py` is ready and will
-  produce one the moment both exist; it currently refuses to run
-  (`SystemExit`) rather than report anything.
-- **The ADR recording "the chosen default bridge and why"** (the other half
-  of M3's accept criterion) can't be written honestly without that recall@k
-  data to base it on. Not written yet — will follow directly from the first
+- **There's still no real golden set**, so still no real recall@k table —
+  M3's actual accept criterion. SPEC.md Section 10.3's `expected_passage_ids`
+  now *can* reference real chunk ids (the corpus is ingested), but building
+  ~100-200 human-reviewed questions needs either an LLM to draft candidates
+  from the real corpus (SPEC.md 10.3's "Claude Code builds... a script that
+  drafts candidate questions" — no LLM client exists until M4) or manual
+  human authoring now. `eval/retrieval_eval.py` is ready and will produce a
+  real report the moment `eval/golden/golden.jsonl` exists.
+- **The ADR recording "the chosen default bridge and why"** can't be written
+  honestly without that recall@k data. Will follow directly from the first
   real `eval/retrieval_eval.py` run.
-- The retrieval bridges, store, and chunking are proven to work mechanically
-  (integration test with a real synthetic document + real models), which is
-  most of the engineering risk for M3 — what's left once sources.yaml
-  arrives is: run `make ingest`, draft/collect ~100-200 golden questions
-  against the real corpus (needs an LLM or manual human authoring), run
-  `eval/retrieval_eval.py`, then write the ADR from real numbers.
+- Everything else that real recall@k data depends on is now proven working:
+  real corpus ingested (246 chunks, 5 documents), retrieval spot-checks look
+  correct, all three bridges pass their integration tests against real
+  models. What's left is purely the golden-set question: get an LLM wired
+  up early (bring M4's LLM client forward, or provide a hosted API key now)
+  to draft candidates for human review, or author them by hand.
 
 ### Next milestone
 
-Cannot start M4 (first full voice turn) in the normal sense until M3's
-accept criteria are actually met, though M4's other prerequisites (LLM
-client, LangGraph policy, TTS, LiveKit adapter) don't depend on the KB and
-could be built in parallel if the human wants to proceed that way.
+M4 (first full voice turn) prerequisites — LLM client, LangGraph policy,
+TTS, LiveKit adapter — don't depend on the KB and could proceed in parallel.
+Bringing the LLM client forward from M4 would also unblock the golden-set
+drafting script above, closing out M3's remaining accept criteria at the
+same time.
 
 ## M2: Real audio front end
 

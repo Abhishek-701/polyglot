@@ -1,8 +1,15 @@
 """Synthetic end-to-end retrieval test: proves the ingest -> store -> bridge
-pipeline works mechanically with a tiny in-test corpus. These are NOT real
-KB recall numbers — that needs config/sources.yaml (human-provided,
-CLAUDE.md rule 6) and a real `make ingest` run; see eval/retrieval_eval.py
-for that once sources.yaml exists.
+pipeline works mechanically. These are NOT real KB recall numbers — see
+eval/retrieval_eval.py for that (needs a human-reviewed golden set).
+
+This runs against the same dev Postgres that holds the real ingested KB
+(config/sources.yaml), so the fixture document uses deliberately invented
+brand/policy terms ("Zyloport", "Flexipass", "Category Nine") instead of
+realistic airline-refund language: a realistic-sounding fixture was
+originally used here and legitimately lost to real KB content in the top-k
+once the corpus was ingested (SPEC.md's retrieval doing exactly what it
+should — this was a test-isolation bug, not a retrieval bug). Invented
+terms can't collide with anything real, regardless of what's in the DB.
 
 Requires Postgres reachable (docker compose up postgres) and the BGE-M3 /
 NLLB / reranker models downloaded; marked @pytest.mark.network. Skips
@@ -29,11 +36,15 @@ DSN = os.environ.get(
 )
 
 REFUND_POLICY_TEXT = (
-    "Passengers whose flights are cancelled by the airline are entitled to a full refund "
-    "of the ticket price, including any optional fees, if they choose not to be rebooked "
-    "on an alternative flight."
+    "Passengers holding a Zyloport Airways Flexipass ticket who experience a Category "
+    "Nine service disruption are entitled to a full monetary refund of the Flexipass "
+    "fare, including the Zyloport convenience surcharge, without needing to accept a "
+    "substitute Zyloport itinerary."
 )
-QUERY_ES = "¿Puedo obtener un reembolso por mi vuelo cancelado?"
+QUERY_ES = (
+    "¿Qué compensación ofrece Zyloport Airways por una interrupción de servicio de "
+    "Categoría Nueve en un billete Flexipass?"
+)
 
 
 @pytest.fixture(scope="module")

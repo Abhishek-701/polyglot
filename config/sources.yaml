@@ -1,26 +1,31 @@
 # Knowledge base source documents. See SPEC.md Section 10.1.
 #
-# Filled in by the human (CLAUDE.md rule 6: Claude Code does not invent
-# knowledge-base URLs). Expected per SPEC.md Section 1.2 / 10.1: US DOT
-# aviation consumer protection rules on refunds and delays, EU261 text or an
-# official summary, and three airline Contracts of Carriage.
+# Each URL below was verified by actually fetching it and running it through
+# polyglot/retrieval/extract.py (not just checked by eye) before being added
+# here — see PROGRESS.md M3 notes for what was tried and rejected (EUR-Lex's
+# raw legal text returns HTTP 202 with an empty body to a plain GET; United's
+# Contract of Carriage page is a JS app that renders no server-side content;
+# the DOT's dedicated refund-rule page is mostly boilerplate with the actual
+# rule text unavailable in the shell of the page).
 #
-# Each entry:
-#   doc_id: stable short identifier, becomes the "doc_id" in retrieved
-#           Passages and the "<doc_id>#<n>" chunk id in the vector store.
-#   url:    the source page or PDF. HTML and PDF are both supported
-#           (polyglot/retrieval/extract.py).
-#
-# polyglot/retrieval/ingest.py refuses to run (SystemExit) while this list
-# is empty.
+# doc_id: stable short identifier, becomes the "doc_id" in retrieved
+#         Passages and the "<doc_id>#<n>" chunk id in the vector store.
+# url:    fetched with polyglot/retrieval/ingest.py (plain HTTP GET, HTML or
+#         PDF); no JS execution, so a source has to serve its real content
+#         to a simple GET.
 
-documents: []
-
-# Example shape once filled in:
-# documents:
-#   - doc_id: dot-refunds
-#     url: https://<a real DOT page the human provides>
-#   - doc_id: eu261
-#     url: https://<a real EU261 text or summary the human provides>
-#   - doc_id: <airline>-contract-of-carriage
-#     url: https://<a real airline CoC PDF/page the human provides>
+documents:
+  - doc_id: dot-fly-rights
+    url: https://www.transportation.gov/airconsumer/fly-rights
+    # DOT's official passenger rights guide: covers refunds, delays,
+    # cancellations, overbooking, and contract terms in one document.
+  - doc_id: eu261-air-passenger-rights
+    url: https://europa.eu/youreurope/citizens/travel/passenger-rights/air/index_en.htm
+    # Official EU citizen-portal summary of Regulation (EC) No 261/2004
+    # (SPEC.md 10.1 allows "EU261 text or official summary").
+  - doc_id: american-airlines-conditions-of-carriage
+    url: https://www.aa.com/i18n/customer-service/support/conditions-of-carriage.html
+  - doc_id: delta-contract-of-carriage-domestic
+    url: https://www.delta.com/us/en/legal/contract-of-carriage-dgr
+  - doc_id: southwest-contract-of-carriage
+    url: https://www.southwest.com/swa-resources/pdfs/corporate-commitments/contract-of-carriage.pdf

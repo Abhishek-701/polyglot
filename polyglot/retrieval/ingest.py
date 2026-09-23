@@ -31,8 +31,13 @@ def load_sources(path: Path) -> list[dict[str, str]]:
     return data.get("documents", [])
 
 
+_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) polyglot-ingest/0.1"
+
+
 def fetch(url: str) -> tuple[bytes, str]:
-    response = requests.get(url, timeout=30, headers={"User-Agent": "polyglot-ingest/0.1"})
+    # Some sources (e.g. transportation.gov) 403 a generic UA string like
+    # "polyglot-ingest/0.1" alone — confirmed while verifying config/sources.yaml.
+    response = requests.get(url, timeout=30, headers={"User-Agent": _USER_AGENT})
     response.raise_for_status()
     return response.content, response.headers.get("content-type", "")
 
@@ -40,14 +45,20 @@ def fetch(url: str) -> tuple[bytes, str]:
 def ingest_document(
     store: RetrievalStore, embedder: SentenceTransformer, doc_id: str, url: str
 ) -> bool:
-    """Returns True if the document was (re)ingested, False if unchanged."""
+    """Returns True if the document was (re)ingested, False if unchanged.
+
+    Hashes the *extracted* text, not the raw response bytes: some sites
+    (confirmed on American Airlines' page) serve different raw bytes on
+    every request (embedded nonces/timestamps in unrelated script tags)
+    while the actual policy text is identical — hashing raw bytes would
+    make idempotency never trigger for those sources.
+    """
     content, content_type = fetch(url)
-    content_hash = hashlib.sha256(content).hexdigest()
+    sections = extract_sections(content, content_type, url)
+    content_hash = hashlib.sha256("".join(text for _heading, text in sections).encode()).hexdigest()
 
     if store.document_hash(doc_id) == content_hash:
         return False
-
-    sections = extract_sections(content, content_type, url)
     tokenizer = get_tokenizer()
     chunks = [
         chunk
@@ -58,9 +69,12 @@ def ingest_document(
     embeddings = (
         embedder.encode([c.text for c in chunks], normalize_embeddings=True) if chunks else []
     )
+    # chunk.chunk_index is local to its section (chunk_section starts every
+    # section back at 0), so it collides across sections — renumber globally
+    # per document here, since that's what becomes the store's chunk id.
     rows = [
-        (chunk.section, chunk.chunk_index, chunk.text, embedding)
-        for chunk, embedding in zip(chunks, embeddings, strict=True)
+        (chunk.section, index, chunk.text, embedding)
+        for index, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
     ]
     store.upsert_document(doc_id, url, content_hash, rows)
     return True

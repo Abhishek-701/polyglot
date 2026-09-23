@@ -1,7 +1,11 @@
-# Infra scaffold per SPEC.md Section 13. None of these services are exercised
-# by any code yet (M0) — postgres/redis are used starting M3, langfuse/livekit
-# starting M4. Versions are placeholders; pin exact tags when each service is
-# first actually used (CLAUDE.md rule 3).
+# Infra scaffold per SPEC.md Section 13. postgres/redis used starting M3,
+# langfuse/livekit starting M4. Versions are placeholders; pin exact tags
+# when each service is first actually used (CLAUDE.md rule 3).
+#
+# postgres is mapped to host port 5433, not 5432: this dev machine already
+# runs a native Windows PostgreSQL service on 5432 (unrelated to this
+# project), and both processes binding 0.0.0.0:5432 made the native one
+# silently win host connections. See PROGRESS.md M3 notes.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -10,7 +14,7 @@ services:
       POSTGRES_PASSWORD: polyglot
       POSTGRES_DB: polyglot
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

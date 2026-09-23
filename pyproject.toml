@@ -15,6 +15,12 @@ dependencies = [
     "jiwer>=3",
     "datasets>=2.20",
     "requests>=2.31",
+    "sentence-transformers>=6",
+    "psycopg[binary]>=3.3",
+    "pgvector>=0.5",
+    "beautifulsoup4>=4.12",
+    "lxml>=5",
+    "pypdf>=5",
 ]
 
 [tool.uv.sources]

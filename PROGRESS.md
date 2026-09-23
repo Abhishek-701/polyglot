@@ -1,5 +1,159 @@
 # Progress
 
+## M3: Knowledge base and retrieval
+
+**Status: partially complete, blocked on human input.** All retrieval
+infrastructure is built and tested; the milestone's actual accept criteria
+(a real recall@k table, an ADR naming the chosen default bridge) cannot be
+produced honestly yet — see "Blocked" below. Per CLAUDE.md rule 5, stopping
+here rather than faking numbers.
+
+### What was built
+
+- `polyglot/retrieval/extract.py` — HTML section extraction (BeautifulSoup:
+  strip nav/header/footer/script/style/aside/form, split on h1-h6 into
+  `(heading, text)` pairs, "document" fallback if no headings) and PDF
+  extraction (pypdf, one section per page — PDFs don't have reliable heading
+  markup without layout analysis).
+- `polyglot/retrieval/chunking.py` — `chunk_section`: 300-500 token windows
+  with 50 token overlap (SPEC.md Section 8.7), tokenized with BGE-M3's own
+  tokenizer so chunk sizes match what the embedding model actually sees. A
+  trailing window smaller than `min_tokens` is folded into the previous
+  chunk instead of standing alone (occasionally producing a chunk bigger
+  than `max_tokens` — a deliberate tradeoff over emitting tiny fragments).
+- `polyglot/retrieval/store.py` — `RetrievalStore`: Postgres + pgvector,
+  HNSW index on cosine distance, `documents`/`chunks` tables, content-hash
+  based idempotency. ADR: `docs/decisions/002-pgvector-store.md`.
+- `polyglot/retrieval/ingest.py` — downloads a source, extracts, chunks,
+  embeds (BGE-M3), upserts; skips re-ingesting unchanged documents (content
+  hash). Refuses to run against an empty `config/sources.yaml` (see
+  "Blocked").
+- `polyglot/retrieval/bridges/multilingual.py` — embed the query directly
+  with BGE-M3, dense search.
+- `polyglot/retrieval/bridges/mt_bridge.py` — `Translator` (NLLB-200-distilled-600M)
+  + BGE-M3 embed + dense search.
+- `polyglot/retrieval/bridges/hybrid.py` — reciprocal rank fusion (k=60) of
+  mt + multilingual, optional rerank with `bge-reranker-v2-m3`.
+- `eval/metrics/retrieval.py` — recall@1/5/10, MRR, grouped by
+  language/bridge.
+- `eval/golden/schema.py` — `GoldenItem`/`Speaker` pydantic models, exactly
+  SPEC.md Section 10.3's schema. `expected_passage_ids` reference
+  `RetrievalStore` chunk ids (`<doc_id>#<chunk_index>`).
+- `eval/golden/validate.py` — validates `golden.jsonl` against the schema
+  and reports pass/fail against Section 10.3's coverage targets (200 items,
+  >=40/language, >=20% code-switched for es/hi, >=15% unanswerable).
+- `eval/retrieval_eval.py` — the real recall@k/MRR report CLI, ready to run
+  the moment sources + a golden set exist (see "Blocked").
+- `config/sources.yaml` — empty template (`documents: []`) with the expected
+  shape commented in; `ingest.py` refuses to run while it's empty.
+- Tests: `test_chunking.py` (fake word-level tokenizer, no network — window/
+  overlap/merge logic swept across many input sizes), `test_extract.py`
+  (in-memory HTML fixtures + a blank-page PDF), `test_retrieval_metrics.py`,
+  `test_golden_validate.py`, and `tests/integration/test_retrieval_bridges.py`
+  (`@pytest.mark.network`: a synthetic one-document corpus ingested into the
+  real Postgres/pgvector instance, all three bridges — including the real
+  NLLB translation and BGE-M3/reranker models — correctly retrieve the
+  relevant passage for a Spanish query).
+
+### Environment work
+
+- **Docker Desktop wasn't running; started it.** Low-risk (starting an
+  application), needed to get Postgres up.
+- **Port 5432 conflict: this machine already runs a native Windows
+  PostgreSQL service on 5432**, unrelated to this project. Both it and our
+  container's port mapping bound `0.0.0.0:5432`; the native service silently
+  won host-originated connections (Docker's own `docker exec` into the
+  container worked fine — only host->container routing was broken). Didn't
+  touch the pre-existing native service; remapped our compose file to host
+  port 5433 instead (`docker-compose.yml`, `.env.example`).
+  `POLYGLOT_DB_DSN` env var overrides the default if needed.
+- Verified real model downloads/APIs work on this CPU-only Windows box:
+  `BAAI/bge-m3` (1024-dim, sentence-transformers), `facebook/nllb-200-distilled-600M`
+  (translation, direct `AutoModelForSeq2SeqLM.generate()`), `BAAI/bge-reranker-v2-m3`
+  (`CrossEncoder`), pgvector 0.8.3 + psycopg3 + pgvector-python.
+
+### Test and lint status
+
+- `uv run ruff check .`, `uv run ruff format --check .` — clean.
+- `uv run mypy polyglot/core` (strict) — clean, unchanged (retrieval code is
+  outside `core/`, same scoping decision as M2).
+- `uv run pytest` (network deselected) — 66 passed.
+- `uv run pytest -m network` — 7 passed (4 from M2 + 3 new retrieval bridge
+  tests: multilingual, mt, and hybrid-with-rerank all correctly find the
+  relevant passage for a real Spanish query against a real synthetic corpus).
+
+### Bugs found and fixed while building this
+
+- **`transformers==5.17.0` removed the generic `pipeline("translation", ...)`
+  task** (`KeyError: Unknown task translation`). Used
+  `AutoModelForSeq2SeqLM.generate()` directly instead — more explicit control
+  over `forced_bos_token_id` anyway.
+- **Trafilatura (originally planned for HTML extraction) collapses headings
+  into flat paragraph text** even in its XML/HTML output modes with
+  `include_formatting=True` — confirmed by direct testing, not just reading
+  docs. Since heading-preserving sections are a hard SPEC.md 8.7 requirement,
+  switched to BeautifulSoup with direct heading-tag splitting instead. Not
+  a bug exactly (trafilatura does what it's designed to do — boilerplate
+  removal, not structure preservation), but a real planning correction made
+  before writing dependent code, not after.
+
+### Decisions made / spec interpretations
+
+- **NLLB language codes confirmed against the installed tokenizer's vocab**:
+  `eng_Latn`, `spa_Latn`, `hin_Deva`, `tgl_Latn`. Note NLLB uses `tgl_Latn`
+  for Tagalog while FLEURS (M2) uses `fil_ph` — different datasets' naming
+  for the same language, not a bug, just worth remembering when cross-
+  referencing the two.
+- **Chunk token counts use BGE-M3's own tokenizer**, not a generic one
+  (tiktoken, word count) — SPEC.md doesn't specify which tokenizer "300 to
+  500 tokens" refers to; using the embedding model's own tokenizer keeps
+  chunk sizing meaningful relative to what it actually encodes.
+- **`eval/golden/validate.py`'s coverage checks are informational (pass/
+  fail printout), not a hard gate.** SPEC.md Section 10.3 says "Claude Code
+  builds the schema, validators, and a script that drafts candidate
+  questions... for human review" — the human still finalizes the set, so
+  this validates structure/coverage, it doesn't approve content.
+- **The golden-question-drafting generator (Section 10.3: "drafts candidate
+  questions and reference answers from the corpus") was not built.** It
+  needs a working LLM (Section 5: Qwen2.5-7B via vLLM, or the hosted
+  OpenAI-compatible fallback from the M0 open questions) to actually
+  generate candidate Q&A pairs — no LLM client exists yet (that's M4). Built
+  the schema and validator now since they don't need one; the drafting
+  script is deferred to when M4's LLM client exists, or sooner if a hosted
+  API key is provided.
+
+### Blocked
+
+- **`config/sources.yaml` is empty.** CLAUDE.md rule 6 and SPEC.md Section
+  10.1 are explicit: the human fills this in, Claude Code does not invent
+  knowledge-base URLs. Needed: US DOT refund/delay rules, EU261 text or an
+  official summary, and three airline Contracts of Carriage (SPEC.md Section
+  1.2). `polyglot/retrieval/ingest.py` refuses to run until this has real
+  entries.
+- **Without a real ingested corpus, there's no real golden set** (Section
+  10.3's `expected_passage_ids` must reference real chunk ids, which only
+  exist after ingestion) **and therefore no real recall@k table** — M3's
+  actual accept criterion. `eval/retrieval_eval.py` is ready and will
+  produce one the moment both exist; it currently refuses to run
+  (`SystemExit`) rather than report anything.
+- **The ADR recording "the chosen default bridge and why"** (the other half
+  of M3's accept criterion) can't be written honestly without that recall@k
+  data to base it on. Not written yet — will follow directly from the first
+  real `eval/retrieval_eval.py` run.
+- The retrieval bridges, store, and chunking are proven to work mechanically
+  (integration test with a real synthetic document + real models), which is
+  most of the engineering risk for M3 — what's left once sources.yaml
+  arrives is: run `make ingest`, draft/collect ~100-200 golden questions
+  against the real corpus (needs an LLM or manual human authoring), run
+  `eval/retrieval_eval.py`, then write the ADR from real numbers.
+
+### Next milestone
+
+Cannot start M4 (first full voice turn) in the normal sense until M3's
+accept criteria are actually met, though M4's other prerequisites (LLM
+client, LangGraph policy, TTS, LiveKit adapter) don't depend on the KB and
+could be built in parallel if the human wants to proceed that way.
+
 ## M2: Real audio front end
 
 **Status:** complete, ready for human review.

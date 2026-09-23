@@ -1,0 +1,26 @@
+# Knowledge base source documents. See SPEC.md Section 10.1.
+#
+# Filled in by the human (CLAUDE.md rule 6: Claude Code does not invent
+# knowledge-base URLs). Expected per SPEC.md Section 1.2 / 10.1: US DOT
+# aviation consumer protection rules on refunds and delays, EU261 text or an
+# official summary, and three airline Contracts of Carriage.
+#
+# Each entry:
+#   doc_id: stable short identifier, becomes the "doc_id" in retrieved
+#           Passages and the "<doc_id>#<n>" chunk id in the vector store.
+#   url:    the source page or PDF. HTML and PDF are both supported
+#           (polyglot/retrieval/extract.py).
+#
+# polyglot/retrieval/ingest.py refuses to run (SystemExit) while this list
+# is empty.
+
+documents: []
+
+# Example shape once filled in:
+# documents:
+#   - doc_id: dot-refunds
+#     url: https://<a real DOT page the human provides>
+#   - doc_id: eu261
+#     url: https://<a real EU261 text or summary the human provides>
+#   - doc_id: <airline>-contract-of-carriage
+#     url: https://<a real airline CoC PDF/page the human provides>

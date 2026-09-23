@@ -22,7 +22,7 @@ down:
 	docker compose down
 
 ingest:
-	@echo "make ingest: not implemented until M3"
+	uv run python -m polyglot.retrieval.ingest
 
 agent:
 	@echo "make agent: not implemented until M4"

@@ -132,3 +132,33 @@ async def test_guard_replaces_ungrounded_figure() -> None:
     )
     assert result["guard_triggered"] is True
     assert "$999" not in result["assistant_text"]
+
+
+async def test_on_event_fires_for_retrieval_and_llm_first_token() -> None:
+    events: list[str] = []
+    passage = Passage(
+        id="p1", doc_id="dot", text="Refunds within 7 days.", source_url="x", score=0.9
+    )
+    graph = build_policy_graph(
+        _ScriptedLLM(generate_text="You get a refund within 7 days."),
+        FakeRetriever(passages=[passage]),
+        intent_classifier=_classifier("refund", 0.9),
+        on_event=events.append,
+    )
+    await graph.ainvoke({"user_text": "refund please", "lang": "en", "history": []})
+    assert events == ["retrieval_start", "retrieval_end", "llm_first_token"]
+
+
+async def test_on_event_fires_tool_call_for_flight_status() -> None:
+    events: list[str] = []
+    graph = build_policy_graph(
+        _ScriptedLLM(
+            tool_call_input={"flight_number": "AA100", "date": "2026-09-25"},
+            generate_text="Your flight is on time.",
+        ),
+        FakeRetriever(),
+        intent_classifier=_classifier("flight_status", 0.9),
+        on_event=events.append,
+    )
+    await graph.ainvoke({"user_text": "is AA100 on time", "lang": "en", "history": []})
+    assert events == ["tool_call", "llm_first_token"]

@@ -1,10 +1,15 @@
 """CLI entry point: make replay SCENARIO=<path> PROFILE=naive|tuned MODE=simulated|realtime.
 
-See SPEC.md Section 11.1. M1 scope: the pipeline is wired entirely with fakes
-(polyglot/fakes.py) since no real ASR/LLM/TTS exist yet. --profile is loaded
-and validated but does not yet change fake behavior — the naive/tuned flags
-only start affecting real component choices from M5 onward. Output: an event
-log JSONL and a turn records JSONL, written under reports/<run_id>/.
+See SPEC.md Section 11.1. Deliberately fakes-only (polyglot/fakes.py),
+including a fake intent classifier so it never triggers a real model
+download — this is the fast/offline scenario-mechanics demo from M1, kept
+as-is even though real components now exist (M2-M4). For a real-component
+run see eval/latency_report.py (M4), which builds an equivalent Pipeline
+with real VAD/ASR/retrieval/LLM/TTS instead. --profile is loaded and
+validated but does not yet change fake behavior here — the naive/tuned
+flags only start affecting real component choices from M5 onward. Output:
+an event log JSONL and a turn records JSONL, written under
+reports/<run_id>/.
 """
 
 import argparse
@@ -29,7 +34,13 @@ from polyglot.fakes import (
     FakeVAD,
     ScriptedFakeASREngine,
 )
+from polyglot.policy.intents import IntentResult
 from polyglot.transport.replay_adapter import ReplayAdapter, Scenario
+
+
+def _fake_intent_classifier(text: str) -> IntentResult:
+    return IntentResult(label="other", confidence=1.0)
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -72,6 +83,7 @@ def build_fake_pipeline(scenario: Scenario, clock: Clock, event_log: EventLog) -
         clock=clock,
         event_log=event_log,
         session_id=scenario.id,
+        intent_classifier=_fake_intent_classifier,
     )
 
 

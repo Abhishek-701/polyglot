@@ -21,7 +21,12 @@ from polyglot.fakes import (
     FakeVAD,
     ScriptedFakeASREngine,
 )
+from polyglot.policy.intents import IntentResult
 from polyglot.transport.replay_adapter import ReplayAdapter, Scenario
+
+
+def _fake_classifier(text: str) -> IntentResult:
+    return IntentResult(label="refund", confidence=0.9)
 
 
 def _make_scenario() -> Scenario:
@@ -71,6 +76,7 @@ def _build_pipeline(tmp_path: Path, run_name: str) -> Pipeline:
         clock=SimulatedClock(),
         event_log=EventLog(tmp_path / f"{run_name}.jsonl"),
         session_id="determinism-check",
+        intent_classifier=_fake_classifier,
     )
 
 

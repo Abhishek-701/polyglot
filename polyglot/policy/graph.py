@@ -10,6 +10,12 @@ writing this).
 Only the policy graph lives here — the audio pipeline (core/pipeline.py)
 stays plain asyncio per CLAUDE.md's architecture rule ("LangGraph is used
 only for the dialogue policy").
+
+`on_event` is an optional plain callback (not EventLog itself — this module
+doesn't import core/events.py) so Pipeline can still log "retrieval_start"/
+"retrieval_end"/"llm_first_token" per SPEC.md Section 7.3 even though
+retrieval and generation now happen inside graph nodes rather than in
+Pipeline directly.
 """
 
 import json
@@ -108,13 +114,20 @@ def build_policy_graph(
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     prefix_cache_prompt_order: bool = False,
     intent_classifier: Callable[[str], IntentResult] = default_classify_intent,
+    on_event: Callable[[str], None] | None = None,
 ) -> Any:
+    def emit(kind: str) -> None:
+        if on_event is not None:
+            on_event(kind)
+
     async def classify_intent_node(state: PolicyState) -> dict[str, Any]:
         result = intent_classifier(state["user_text"])
         return {"intent": result.label, "intent_confidence": result.confidence}
 
     async def retrieve_node(state: PolicyState) -> dict[str, Any]:
+        emit("retrieval_start")
         passages = await retriever.retrieve(state["user_text"], state["lang"], k)
+        emit("retrieval_end")
         return {"passages": passages}
 
     async def tool_call_node(state: PolicyState) -> dict[str, Any]:
@@ -145,6 +158,7 @@ def build_policy_graph(
             result = lookup_booking(
                 tool_input.get("confirmation_code", ""), tool_input.get("last_name", "")
             )
+        emit("tool_call")
         return {"tool_result": result}
 
     async def clarify_node(state: PolicyState) -> dict[str, Any]:
@@ -174,8 +188,12 @@ def build_policy_graph(
             messages.insert(-1, Message(role="system", content=note))
 
         text = ""
+        first_token_emitted = False
         async for delta in llm.stream(messages, None):
             if delta.text:
+                if not first_token_emitted:
+                    emit("llm_first_token")
+                    first_token_emitted = True
                 text += delta.text
         return {"assistant_text": text}
 

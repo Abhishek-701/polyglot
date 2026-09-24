@@ -1,8 +1,11 @@
-"""Pipeline integration test: a normal turn end to end with fakes.
+"""Pipeline integration test: a normal turn end to end with fakes,
+including the LangGraph dialogue policy (M4) — intent classification is
+faked too, so this stays fast and network-free; the graph's own routing
+logic is covered separately and thoroughly in test_policy_graph.py.
 
-Covers M1's accept criteria: a turn runs end to end and the event log
-contains every event kind the M1 pipeline produces (SPEC.md Section 7.3).
-bargein and tool_call are excluded: those stages don't exist until M6/M4.
+bargein is excluded from EXPECTED_EVENT_KINDS: that stage doesn't exist
+until M6. tool_call isn't hit by this test's refund-intent path (it would
+route to a different graph branch); see test_policy_graph.py for that.
 """
 
 from pathlib import Path
@@ -20,6 +23,7 @@ from polyglot.fakes import (
     FakeVAD,
     ScriptedFakeASREngine,
 )
+from polyglot.policy.intents import IntentResult
 from polyglot.transport.replay_adapter import ReplayAdapter, Scenario, ScenarioTurn
 
 EXPECTED_EVENT_KINDS = {
@@ -33,6 +37,10 @@ EXPECTED_EVENT_KINDS = {
     "tts_first_frame",
     "audio_out_first_frame",
 }
+
+
+def _fake_refund_classifier(text: str) -> IntentResult:
+    return IntentResult(label="refund", confidence=0.9)
 
 
 def _build_pipeline(tmp_path: Path) -> tuple[Pipeline, EventLog]:
@@ -73,6 +81,7 @@ def _build_pipeline(tmp_path: Path) -> tuple[Pipeline, EventLog]:
         clock=SimulatedClock(),
         event_log=event_log,
         session_id="s1",
+        intent_classifier=_fake_refund_classifier,
     )
     return pipeline, event_log
 
@@ -86,6 +95,7 @@ async def test_normal_turn_produces_all_expected_events(tmp_path: Path) -> None:
 
     assert len(results) == 1
     record = results[0].record
+    assert record.intent == "refund"
     assert record.assistant_text_spoken == "Here is your answer."
     assert record.passages[0].doc_id == "dot-refunds"
     assert results[0].audio_frames

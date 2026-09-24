@@ -2,13 +2,60 @@
 
 ## M4: First full voice turn (naive profile) — IN PROGRESS
 
-**Status: dialogue policy AND TTS done and tested (LLM client, mock tools,
-intent classifier, prompt assembly, history compaction, grounding guard,
-full LangGraph graph, clause splitter, Kokoro engine + router, TTS language
-matrix, compliance greeting). Still to do: LiveKit adapter, web client,
-wiring it all into `core/pipeline.py`, and the naive baseline latency
-report.** This section will be filled in fully once the milestone is
-complete; recording progress now since these are natural commit boundaries.
+**Status: dialogue policy, TTS, AND `core/pipeline.py` rewiring done and
+tested (LLM client, mock tools, intent classifier, prompt assembly, history
+compaction, grounding guard, full LangGraph graph, clause splitter, Kokoro
+engine + router, TTS language matrix, compliance greeting, naive
+silence-based turn detector, Pipeline now runs the real dialogue policy
+graph instead of M1's inline retrieval+LLM calls). Still to do: a
+real-component latency report, LiveKit adapter, web client.** This section
+will be filled in fully once the milestone is complete; recording progress
+now since these are natural commit boundaries.
+
+### Pipeline rewiring: real components, not fakes
+
+- **`polyglot/turn/silence_detector.py` didn't exist yet** — a real gap
+  found while wiring: M1's `Pipeline` always used `FakeTurnDetector` (which
+  ignores its inputs entirely), so the naive baseline's actual turn-commit
+  logic (SPEC.md 8.5: commit after >=500ms of trailing VAD silence) had
+  never been built. Built `SilenceTurnDetector` plus real trailing-silence
+  tracking in `Pipeline` itself: M1's turn-commit code hardcoded
+  `trailing_silence_ms=0` on every check (fine for fakes, wrong for a real
+  detector) — now tracks the last VAD `speech_end` timestamp per turn and
+  computes real elapsed silence before each `end_of_turn_prob` call.
+- **`core/pipeline.py` now calls the LangGraph dialogue policy
+  (`polyglot/policy/graph.py`) instead of doing retrieval + LLM generation
+  inline.** The graph is built once per `Pipeline` (not recompiled per
+  turn) and treated as an opaque `ainvoke(dict) -> dict` — `core/pipeline.py`
+  itself still imports no LangGraph, only `polyglot.policy.graph`, keeping
+  CLAUDE.md's "LangGraph is used only for the dialogue policy" rule intact.
+  Retrieval/LLM events (`retrieval_start`/`retrieval_end`/`llm_first_token`/
+  `tool_call`) now come from the graph's `on_event` callback rather than
+  Pipeline calling those components directly — the callback is bound once
+  at graph-build time but needs the *current* turn's id, so `Pipeline`
+  tracks `_active_turn_id`/`_active_turn_start_ms`/`_active_timings` as
+  mutable instance state the callback reads at call time, rather than
+  rebuilding the graph every turn.
+- **TTS now goes through the real clause splitter** (`tts_chunking`
+  parameter, naive default `"full"` per SPEC.md Section 9's flag table —
+  matches the naive baseline exactly: buffer the whole LLM response, then
+  synthesize once. Streaming `"clause"` mode through a LangGraph node that
+  currently buffers its whole response before returning is an M5 problem,
+  not M4's).
+- **`build_policy_graph`'s `intent_classifier` parameter had to become a
+  `Pipeline` constructor parameter too**, threaded through to
+  `build_policy_graph` — otherwise every `Pipeline` construction (including
+  every fakes-based unit test) would default to loading the real zero-shot
+  classifier model. Updated `tests/integration/test_pipeline.py`,
+  `test_replay_determinism.py`, and `eval/replay.py`'s fakes-only demo CLI
+  to inject a fake classifier, keeping them fast and network-free.
+- Tests: `test_silence_detector.py` (4 tests), updated pipeline/determinism
+  integration tests to exercise the real policy-graph routing (still fully
+  faked LLM/retriever/classifier — routing logic itself is covered
+  thoroughly in `test_policy_graph.py`).
+- `uv run ruff check .`/`format --check .` clean, `mypy polyglot/core`
+  (strict) clean, `uv run pytest` (network deselected) — 124 passed (up
+  from 118: +4 silence detector, +2 policy graph `on_event` tests).
 
 ### LLM backend: Anthropic Claude, not vLLM/Qwen — a real decision, not a default
 
